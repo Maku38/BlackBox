@@ -8,11 +8,10 @@ BlackBox is an open-source, zero-overhead "flight recorder" for Kubernetes.
 
 Instead of parsing gigabytes of noisy logs *after* an OOMKill or crash, BlackBox uses eBPF ring buffers to continuously record the exact syscalls and network flows *leading up* to the failure. When a pod crashes, BlackBox dumps the causal graph and passes it to an LLM to instantly identify the root cause.
 
-### 🚀 See it in action
-**[🔗 Watch BlackBox catch a K8s Fork Bomb]<video width="600" controls>
-  <source src="assets/demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>**
+### 🚀 See it in action  
+
+[![Watch BlackBox catch a K8s Fork Bomb](https://img.youtube.com/vi/cJTSlRwNYGQ/0.jpg)](https://youtu.be/cJTSlRwNYGQ)
+
 
 ---
 
