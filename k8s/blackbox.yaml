@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: blackbox-agent
+  namespace: default
+  labels:
+    app: blackbox
+spec:
+  selector:
+    matchLabels:
+      app: blackbox
+  template:
+    metadata:
+      labels:
+        app: blackbox
+    spec:
+      hostPID: true       
+      hostNetwork: true   
+      containers:
+      - name: blackbox
+        image: blackbox:local
+        imagePullPolicy: Never 
+        securityContext:
+          privileged: true 
+        volumeMounts:
+        - name: sys-fs-bpf
+          mountPath: /sys/fs/bpf
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        # --- NEW: Grant access to Kernel Tracepoints ---
+        - name: sys-kernel-debug
+          mountPath: /sys/kernel/debug
+      volumes:
+      - name: sys-fs-bpf
+        hostPath:
+          path: /sys/fs/bpf
+      - name: proc
+        hostPath:
+          path: /proc
+        # --- NEW: Map the host's debug directory ---
+      - name: sys-kernel-debug
+        hostPath:
+          path: /sys/kernel/debug

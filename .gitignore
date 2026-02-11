@@ -1,0 +1,14 @@
+# Compiled binaries and objects
+blackbox
+*.o
+*.skel.h
+
+# Output dumps
+incident_*.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment files (Never commit your API keys!)
+.env
