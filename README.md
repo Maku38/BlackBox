@@ -10,7 +10,7 @@ Instead of parsing gigabytes of noisy logs *after* an OOMKill or crash, BlackBox
 
 ### 🚀 See it in action
 **[🔗 Watch BlackBox catch a K8s Fork Bomb]<video width="600" controls>
-  <source src="assets/demo.webm" type="video/mp4">
+  <source src="assets/demo.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>**
 
