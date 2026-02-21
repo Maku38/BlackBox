@@ -351,4 +351,4 @@ Apache License 2.0 — See [LICENSE](LICENSE) file.
 
 ---
 
-**Built with ❤️ for the Kubernetes community. Made by [Your Name].**
+**Built with ❤️ for the Kubernetes community. Made by Mayank Joshi.**
