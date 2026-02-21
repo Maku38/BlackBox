@@ -277,7 +277,6 @@ int main(int argc, char **argv) {
     }
 
     skel = main_bpf__open();
-    skel = main_bpf__open();
     if (!skel) return 1;
     if (main_bpf__load(skel)) return 1;
     if (main_bpf__attach(skel)) return 1;
