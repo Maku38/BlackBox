@@ -16,11 +16,8 @@
 // --- FLIGHT RECORDER STORAGE ---
 #define HISTORY_SIZE 10000 
 
-#include <pthread.h>
 
 // --- SECURITY & THREADING ---
-// --- SECURITY & THREADING ---
-pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
 char AUTH_TOKEN[64]; // NEW: Dynamically loaded, no longer hardcoded
 
 
@@ -118,40 +115,20 @@ void resolve_context(int pid, unsigned long long cgroup_id, char *dest, size_t l
 }
 
 // --- DUMP LOGIC ---
-// --- DUMP LOGIC ---
 void dump_blackbox() {
     char filename[64];
     time_t now = time(NULL);
     snprintf(filename, sizeof(filename), "incident_%ld.json", now);
     
-    // 1. ALLOCATE MEMORY TO COPY THE BUFFER
-    size_t copy_size = sizeof(struct recorded_event_t) * HISTORY_SIZE;
-    struct recorded_event_t *log_copy = malloc(copy_size);
-    if (!log_copy) {
-        printf("[ERROR] Failed to allocate memory for log dump.\n");
-        return;
-    }
-
-    // 2. LOCK, COPY, UNLOCK (Microsecond critical section)
-    pthread_mutex_lock(&log_mutex); 
-    memcpy(log_copy, event_log, copy_size);
-    int safe_head = log_head;
-    bool safe_full = full_loop;
-    pthread_mutex_unlock(&log_mutex); 
-    
-    // 3. DO THE SLOW DISK I/O WITHOUT HOLDING THE LOCK
     FILE *f = fopen(filename, "w");
-    if (!f) {
-        free(log_copy);
-        return;
-    }
+    if (!f) return;
 
     fprintf(f, "[\n");
-    int count = safe_full ? HISTORY_SIZE : safe_head;
+    int count = full_loop ? HISTORY_SIZE : log_head;
     
     for (int i = 0; i < count; i++) {
-        int idx = safe_full ? (safe_head + i) % HISTORY_SIZE : i;
-        struct recorded_event_t *rec = &log_copy[idx]; // Read from the COPY
+        int idx = full_loop ? (log_head + i) % HISTORY_SIZE : i;
+        struct recorded_event_t *rec = &event_log[idx];
         struct event_t *e = &rec->raw;
 
         char src_ip[16] = "", dst_ip[16] = "";
@@ -182,7 +159,6 @@ void dump_blackbox() {
     
     fprintf(f, "]\n");
     fclose(f);
-    free(log_copy); // 4. FREE THE MEMORY
     printf("\n[!!!] BLACK BOX DUMPED TO: %s\n", filename);
 }
 
@@ -192,8 +168,7 @@ int handle_event(void *ctx, void *data, size_t data_sz) {
     char ctx_str[64];
     resolve_context(e->pid, e->cgroup_id, ctx_str, sizeof(ctx_str));
 
-    pthread_mutex_lock(&log_mutex); // LOCK
-    
+    // No mutex needed! This runs synchronously in the poll loop.
     memcpy(&event_log[log_head].raw, e, sizeof(struct event_t));
     strncpy(event_log[log_head].context, ctx_str, 64);
     
@@ -203,7 +178,6 @@ int handle_event(void *ctx, void *data, size_t data_sz) {
         full_loop = true;
     }
     
-    pthread_mutex_unlock(&log_mutex); // UNLOCK
     return 0;
 }
 
@@ -236,7 +210,8 @@ void *trigger_server(void *arg) {
             
             // Check for the auth token in the request
             char expected_path[128];
-            snprintf(expected_path, sizeof(expected_path), "GET /dump?token=%s", AUTH_TOKEN);
+            // FIXED: Added " HTTP/1." to prevent suffix injection bypass
+            snprintf(expected_path, sizeof(expected_path), "GET /dump?token=%s HTTP/1.", AUTH_TOKEN);
 
             if (strstr(buffer, expected_path) != NULL) {
                 printf("\n[NETWORK] Valid trigger received. Dumping...\n");
