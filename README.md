@@ -162,6 +162,53 @@ python3 analyze_real.py incident.json
 
 ---
 
+## 🔒 Authentication & Security
+
+BlackBox requires an authentication token to trigger cluster dumps, preventing unauthorized access to your kernel telemetry.
+
+### Token Management
+
+**1. Running the Agent in Production:**
+
+Start the agent by passing your secure token via environment variable:
+
+```bash
+sudo BLACKBOX_AUTH_TOKEN="your_secure_token_here" ./blackbox
+```
+
+**2. Auto-Generated Dev Tokens:**
+
+If you run the agent without the environment variable, BlackBox automatically generates a temporary session token and prints it to stdout:
+
+```
+[WARNING] BLACKBOX_AUTH_TOKEN env var not set!
+[WARNING] Auto-generated temporary token: dev_7742_1771655109
+```
+
+**3. Triggering a Dump:**
+
+Update the `AUTH_TOKEN` variable in `control-plane/commander.py` to match your token:
+
+```python
+# filepath: control-plane/commander.py
+AUTH_TOKEN = "your_secure_token_here"
+```
+
+Or trigger it manually via `curl`:
+
+```bash
+curl "http://<NODE_IP>:8080/dump?token=your_secure_token_here"
+```
+
+### Best Practices
+
+- **Production:** Use strong, randomly generated tokens (e.g., `openssl rand -hex 32`)
+- **Kubernetes:** Store tokens in K8s Secrets, not hardcoded in YAML
+- **Rotation:** Change tokens periodically and update all Fleet Commander instances
+- **Audit:** Log all dump requests (future roadmap item)
+
+---
+
 ## 🗺️ Roadmap
 
 ### ✅ Completed

@@ -19,8 +19,9 @@
 #include <pthread.h>
 
 // --- SECURITY & THREADING ---
+// --- SECURITY & THREADING ---
 pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
-const char *AUTH_TOKEN = "secret_k8s_7749"; // In production, read this from an ENV var
+char AUTH_TOKEN[64]; // NEW: Dynamically loaded, no longer hardcoded
 
 
 // We need a richer struct for Userspace storage that holds the string
@@ -117,30 +118,45 @@ void resolve_context(int pid, unsigned long long cgroup_id, char *dest, size_t l
 }
 
 // --- DUMP LOGIC ---
+// --- DUMP LOGIC ---
 void dump_blackbox() {
     char filename[64];
     time_t now = time(NULL);
     snprintf(filename, sizeof(filename), "incident_%ld.json", now);
     
+    // 1. ALLOCATE MEMORY TO COPY THE BUFFER
+    size_t copy_size = sizeof(struct recorded_event_t) * HISTORY_SIZE;
+    struct recorded_event_t *log_copy = malloc(copy_size);
+    if (!log_copy) {
+        printf("[ERROR] Failed to allocate memory for log dump.\n");
+        return;
+    }
+
+    // 2. LOCK, COPY, UNLOCK (Microsecond critical section)
+    pthread_mutex_lock(&log_mutex); 
+    memcpy(log_copy, event_log, copy_size);
+    int safe_head = log_head;
+    bool safe_full = full_loop;
+    pthread_mutex_unlock(&log_mutex); 
+    
+    // 3. DO THE SLOW DISK I/O WITHOUT HOLDING THE LOCK
     FILE *f = fopen(filename, "w");
-    if (!f) return;
+    if (!f) {
+        free(log_copy);
+        return;
+    }
 
     fprintf(f, "[\n");
-    
-    pthread_mutex_lock(&log_mutex); // LOCK before reading history
-    
-    int count = full_loop ? HISTORY_SIZE : log_head;
+    int count = safe_full ? HISTORY_SIZE : safe_head;
     
     for (int i = 0; i < count; i++) {
-        // Calculate the correct ring-buffer index
-        int idx = full_loop ? (log_head + i) % HISTORY_SIZE : i;
-        struct recorded_event_t *rec = &event_log[idx];
+        int idx = safe_full ? (safe_head + i) % HISTORY_SIZE : i;
+        struct recorded_event_t *rec = &log_copy[idx]; // Read from the COPY
         struct event_t *e = &rec->raw;
 
         char src_ip[16] = "", dst_ip[16] = "";
         
-        // Only format IPs if it's a network event
-        if (e->type == EVENT_TCP_CONNECT) {
+        if (e->type == 3) { // EVENT_TCP_CONNECT
             format_ip(e->saddr, src_ip, sizeof(src_ip));
             format_ip(e->daddr, dst_ip, sizeof(dst_ip));
         }
@@ -152,7 +168,7 @@ void dump_blackbox() {
         fprintf(f, "    \"comm\": \"%s\",\n", e->comm);
         fprintf(f, "    \"context\": \"%s\",\n", rec->context);
         
-        if (e->type == EVENT_TCP_CONNECT) {
+        if (e->type == 3) {
             fprintf(f, "    \"type\": \"network\",\n");
             fprintf(f, "    \"src_ip\": \"%s\",\n", src_ip);
             fprintf(f, "    \"dst_ip\": \"%s\",\n", dst_ip);
@@ -164,10 +180,9 @@ void dump_blackbox() {
         fprintf(f, "  }%s\n", (i == count - 1) ? "" : ",");
     }
     
-    pthread_mutex_unlock(&log_mutex); // UNLOCK
-    
     fprintf(f, "]\n");
     fclose(f);
+    free(log_copy); // 4. FREE THE MEMORY
     printf("\n[!!!] BLACK BOX DUMPED TO: %s\n", filename);
 }
 
@@ -247,6 +262,21 @@ int main(int argc, char **argv) {
     struct main_bpf *skel;
     struct ring_buffer *rb = NULL;
 
+    // --- NEW: AUTH TOKEN INITIALIZATION ---
+    char *env_token = getenv("BLACKBOX_AUTH_TOKEN");
+    if (env_token) {
+        strncpy(AUTH_TOKEN, env_token, sizeof(AUTH_TOKEN) - 1);
+        AUTH_TOKEN[sizeof(AUTH_TOKEN) - 1] = '\0';
+    } else {
+        srand(time(NULL) ^ getpid());
+        snprintf(AUTH_TOKEN, sizeof(AUTH_TOKEN), "dev_%d_%d", rand() % 10000, (int)time(NULL));
+        printf("\n======================================================\n");
+        printf("[WARNING] BLACKBOX_AUTH_TOKEN env var not set!\n");
+        printf("[WARNING] Auto-generated temporary token: %s\n", AUTH_TOKEN);
+        printf("======================================================\n\n");
+    }
+
+    skel = main_bpf__open();
     skel = main_bpf__open();
     if (!skel) return 1;
     if (main_bpf__load(skel)) return 1;
