@@ -81,11 +81,13 @@ python3 analyze_real.py incident.json
 
 [ ] Webhook support for Slack/PagerDuty alerts.
 
+***
+
 🤝 Contributing & Feedback
 I am a solo developer building this to scratch an itch, and I am actively looking for brutal, unfiltered feedback from SREs, Platform Engineers, and DevOps folks who fight Kubernetes fires daily.
 
 If you think this is awesome, or if you think this would completely break your production cluster—open an issue or reach out. Let's talk.
 
 
-***
+
 
