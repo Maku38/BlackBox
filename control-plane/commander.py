@@ -6,13 +6,19 @@ import time
 # --- FLEET COMMANDER ---
 # This simulates your central Control Plane triggering dumps across N nodes.
 
+# MUST MATCH THE TOKEN IN main.c
+AUTH_TOKEN = "secret_k8s_7749" 
+
 def trigger_node(ip):
-    url = f"http://{ip}:8080"
+    # Fixed: Added the /dump endpoint and the authentication token
+    url = f"http://{ip}:8080/dump?token={AUTH_TOKEN}"
     try:
         # 2-second timeout. If a node is dead, we move on quickly.
         response = requests.get(url, timeout=2)
         if response.status_code == 200:
             return True, f"[SUCCESS] 🟢 Node {ip:<15} -> Dumped."
+        elif response.status_code == 401:
+            return False, f"[FAILED]  🔴 Node {ip:<15} -> HTTP 401 (Unauthorized! Check Token)"
         else:
             return False, f"[FAILED]  🔴 Node {ip:<15} -> HTTP {response.status_code}"
     except requests.exceptions.RequestException as e:
