@@ -16,6 +16,13 @@
 // --- FLIGHT RECORDER STORAGE ---
 #define HISTORY_SIZE 10000 
 
+#include <pthread.h>
+
+// --- SECURITY & THREADING ---
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+const char *AUTH_TOKEN = "secret_k8s_7749"; // In production, read this from an ENV var
+
+
 // We need a richer struct for Userspace storage that holds the string
 struct recorded_event_t {
     struct event_t raw;      // The kernel event
@@ -47,36 +54,47 @@ void format_ip(unsigned int ip, char *buf, size_t len) {
 
 // --- RESOLVER: PID -> Container Name ---
 // Now uses the exact logic confirmed by your 'cat /proc/...' output
+// --- L2 CGROUP CACHE ---
+#define CACHE_SIZE 256
+struct {
+    unsigned long long id;
+    char context[64];
+} cgroup_cache[CACHE_SIZE];
+int cache_head = 0;
+
 void resolve_context(int pid, unsigned long long cgroup_id, char *dest, size_t len) {
-    // 1. L1 Cache Hit?
-    if (cgroup_id == last_cgroup_id && cgroup_id != 0) {
-        strncpy(dest, last_context_cache, len);
+    if (cgroup_id == 0) {
+        strncpy(dest, "HOST", len);
         return;
     }
 
+    // 1. Search the Cache (Defeats the TOCTOU race for fast-dying processes)
+    for (int i = 0; i < CACHE_SIZE; i++) {
+        if (cgroup_cache[i].id == cgroup_id) {
+            strncpy(dest, cgroup_cache[i].context, len);
+            return;
+        }
+    }
+
+    // 2. Cache Miss. Try to read from /proc/
     char path[64];
     char buf[512];
     FILE *f;
+    strncpy(dest, "HOST", len); // Default fallback
 
     snprintf(path, sizeof(path), "/proc/%d/cgroup", pid);
     f = fopen(path, "r");
     
-    // Default to HOST
-    strncpy(dest, "HOST", len);
-    
     if (f) {
         while (fgets(buf, sizeof(buf), f)) {
             char *start = NULL;
-            // Match: 0::/system.slice/docker-<ID>.scope
             if ((start = strstr(buf, "docker-"))) {
-                start += 7; // Skip "docker-"
+                start += 7;
                 char *end = strchr(start, '.');
                 if (end) *end = '\0';
                 snprintf(dest, len, "[docker:%.12s]", start);
                 break;
-            } 
-            // Match: K8s / Kubepods
-            else if ((start = strstr(buf, "kubepods"))) {
+            } else if ((start = strstr(buf, "kubepods"))) {
                  char *last_slash = strrchr(buf, '/');
                  if (last_slash) {
                      start = last_slash + 1;
@@ -92,9 +110,10 @@ void resolve_context(int pid, unsigned long long cgroup_id, char *dest, size_t l
         fclose(f);
     }
 
-    // 2. Update Cache
-    last_cgroup_id = cgroup_id;
-    strncpy(last_context_cache, dest, sizeof(last_context_cache));
+    // 3. Save to Cache for future fast-dying siblings
+    cgroup_cache[cache_head].id = cgroup_id;
+    strncpy(cgroup_cache[cache_head].context, dest, 64);
+    cache_head = (cache_head + 1) % CACHE_SIZE;
 }
 
 // --- DUMP LOGIC ---
@@ -108,24 +127,45 @@ void dump_blackbox() {
 
     fprintf(f, "[\n");
     
-    int start = full_loop ? log_head : 0;
+    pthread_mutex_lock(&log_mutex); // LOCK before reading history
+    
     int count = full_loop ? HISTORY_SIZE : log_head;
     
     for (int i = 0; i < count; i++) {
-        int idx = (start + i) % HISTORY_SIZE;
+        // Calculate the correct ring-buffer index
+        int idx = full_loop ? (log_head + i) % HISTORY_SIZE : i;
         struct recorded_event_t *rec = &event_log[idx];
         struct event_t *e = &rec->raw;
+
+        char src_ip[16] = "", dst_ip[16] = "";
         
-        char s_ip[16] = "0.0.0.0", d_ip[16] = "0.0.0.0";
+        // Only format IPs if it's a network event
         if (e->type == EVENT_TCP_CONNECT) {
-            format_ip(e->saddr, s_ip, sizeof(s_ip));
-            format_ip(e->daddr, d_ip, sizeof(d_ip));
+            format_ip(e->saddr, src_ip, sizeof(src_ip));
+            format_ip(e->daddr, dst_ip, sizeof(dst_ip));
         }
 
-        fprintf(f, "  {\"time\": %llu, \"pid\": %d, \"comm\": \"%s\", \"context\": \"%s\", \"type\": %d, \"dest_ip\": \"%s\", \"dest_port\": %d}%s\n", 
-                e->timestamp_ns, e->pid, e->comm, rec->context, e->type, d_ip, e->dport, 
-                (i == count - 1) ? "" : ",");
+        fprintf(f, "  {\n");
+        fprintf(f, "    \"timestamp\": %llu,\n", e->timestamp_ns);
+        fprintf(f, "    \"pid\": %d,\n", e->pid);
+        fprintf(f, "    \"uid\": %d,\n", e->uid);
+        fprintf(f, "    \"comm\": \"%s\",\n", e->comm);
+        fprintf(f, "    \"context\": \"%s\",\n", rec->context);
+        
+        if (e->type == EVENT_TCP_CONNECT) {
+            fprintf(f, "    \"type\": \"network\",\n");
+            fprintf(f, "    \"src_ip\": \"%s\",\n", src_ip);
+            fprintf(f, "    \"dst_ip\": \"%s\",\n", dst_ip);
+            fprintf(f, "    \"dport\": %d\n", e->dport);
+        } else {
+            fprintf(f, "    \"type\": \"process\"\n");
+        }
+        
+        fprintf(f, "  }%s\n", (i == count - 1) ? "" : ",");
     }
+    
+    pthread_mutex_unlock(&log_mutex); // UNLOCK
+    
     fprintf(f, "]\n");
     fclose(f);
     printf("\n[!!!] BLACK BOX DUMPED TO: %s\n", filename);
@@ -134,12 +174,11 @@ void dump_blackbox() {
 // --- REAL-TIME RECORDING ---
 int handle_event(void *ctx, void *data, size_t data_sz) {
     const struct event_t *e = data;
-    
-    // 1. Resolve Context NOW (while process is alive)
     char ctx_str[64];
     resolve_context(e->pid, e->cgroup_id, ctx_str, sizeof(ctx_str));
 
-    // 2. Write to Circular Buffer
+    pthread_mutex_lock(&log_mutex); // LOCK
+    
     memcpy(&event_log[log_head].raw, e, sizeof(struct event_t));
     strncpy(event_log[log_head].context, ctx_str, 64);
     
@@ -148,6 +187,8 @@ int handle_event(void *ctx, void *data, size_t data_sz) {
         log_head = 0;
         full_loop = true;
     }
+    
+    pthread_mutex_unlock(&log_mutex); // UNLOCK
     return 0;
 }
 
@@ -157,45 +198,45 @@ void *trigger_server(void *arg) {
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
+    char buffer[1024] = {0};
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("Socket failed");
-        return NULL;
-    }
-    
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) return NULL;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(8080); // Default port
+    address.sin_port = htons(8080);
 
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("Bind failed");
-        return NULL;
-    }
-    
-    if (listen(server_fd, 3) < 0) {
-        perror("Listen failed");
-        return NULL;
-    }
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) return NULL;
+    if (listen(server_fd, 3) < 0) return NULL;
 
-    printf("[NETWORK] Agent listening for remote triggers on port 8080...\n");
+    printf("[NETWORK] Agent listening securely on port 8080...\n");
 
     while(!exiting) {
         new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
         if (new_socket > 0) {
-            printf("\n[NETWORK] Trigger command received from Control Plane!\n");
+            // Read the incoming HTTP request
+            memset(buffer, 0, sizeof(buffer));
+            recv(new_socket, buffer, sizeof(buffer) - 1, 0);
             
-            trigger_dump = true; // Signal the main BPF loop to dump
-            
-            // NEW: Fully compliant HTTP/1.1 response with strict CRLF endings
-            char *resp = "HTTP/1.1 200 OK\r\n"
-                         "Content-Type: text/plain\r\n"
-                         "Content-Length: 15\r\n"
-                         "Connection: close\r\n\r\n"
-                         "Dump Triggered\n";
-            
-            send(new_socket, resp, strlen(resp), 0);
+            // Check for the auth token in the request
+            char expected_path[128];
+            snprintf(expected_path, sizeof(expected_path), "GET /dump?token=%s", AUTH_TOKEN);
+
+            if (strstr(buffer, expected_path) != NULL) {
+                printf("\n[NETWORK] Valid trigger received. Dumping...\n");
+                trigger_dump = true;
+                
+                char *resp = "HTTP/1.1 200 OK\r\n"
+                             "Content-Type: application/json\r\n"
+                             "Connection: close\r\n\r\n"
+                             "{\"status\": \"dumping\"}\n";
+                send(new_socket, resp, strlen(resp), 0);
+            } else {
+                printf("\n[NETWORK] Unauthorized access attempt blocked.\n");
+                char *resp = "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n";
+                send(new_socket, resp, strlen(resp), 0);
+            }
             close(new_socket);
         }
     }

@@ -18,10 +18,11 @@ Traditional observability tools (Datadog, ELK, Prometheus) are **reactive**:
 
 ## 🚀 The Solution
 
-BlackBox is **deterministic and deterministic**:
+BlackBox is **deterministic and proactive**:
 
 - **Zero-Overhead Tracing:** eBPF kernel probes capture `sched_process_exec`, `sched_process_exit`, and network flow events directly in the kernel—no userspace context switches
 - **Rolling Ring Buffer:** Continuously stores the last N seconds of events in memory. No disk writes. No network overhead. Until an incident occurs.
+- **L2 Cgroup Cache:** Standard monitoring agents suffer from TOCTOU (Time-of-Check to Time-of-Use) race conditions where a fork-bomb process dies before the agent can read `/proc/` to identify the container. BlackBox implements an L2 Cgroup Cache in C to reliably tag fast-dying processes with their exact Docker/Kubernetes container ID.
 - **Causal Graph AI:** Extracts the exact sequence of events leading up to the crash and feeds it to a local LLM to identify rogue processes, fork bombs, memory leaks, and network anomalies in seconds
 - **Kubernetes-Native:** Deployed as a privileged DaemonSet. Works across all nodes. No application instrumentation required.
 
@@ -43,13 +44,15 @@ BlackBox has three layers:
 ┌─────────────────────────────────────────────────────────────┐
 │ Control Plane (Python)                                      │
 │ • Fleet Commander: Trigger dumps across cluster             │
+│ • Strictly authenticated HTTP API (prevents rogue dumps)     │
 │ • Virtual SRE: AI-powered root cause analysis               │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
 │ K8s Agent (C, userspace)                                    │
 │ • Manages eBPF maps and ring buffers                        │
-│ • Exposes HTTP API (port 8080) for dump triggers            │
+│ • Exposes authenticated HTTP API (port 8080) for dumps      │
+│ • L2 Cgroup Cache: Tags fast-dying processes to containers  │
 │ • Runs as privileged DaemonSet on every node                │
 └─────────────────────────────────────────────────────────────┘
                             ↓
@@ -164,13 +167,15 @@ python3 analyze_real.py incident.json
 ### ✅ Completed
 - [x] eBPF process (`sched_process_exec`, `sched_process_exit`) and network tracing
 - [x] K8s DaemonSet deployment (privileged, all nodes)
+- [x] L2 Cgroup Cache for container identification
 - [x] Distributed Python Fleet Commander
+- [x] Secure API Authentication for the Control Plane trigger
 - [x] Local LLM integration (Google Gemini)
 - [x] HTTP API for dump triggers
 
 ### 🚧 In Progress
 - [ ] Automatic dump triggering on K8s OOMKilled events
-- [ ] RBAC integration for Commander API
+- [ ] Native K8s RBAC integration
 - [ ] Webhook support for Slack/PagerDuty alerts
 - [ ] Grafana dashboard for event timeline visualization
 
@@ -347,7 +352,8 @@ Apache License 2.0 — See [LICENSE](LICENSE) file.
 
 - **GitHub Issues:** Bug reports, feature requests
 - **Discussions:** Ideas, architecture questions
-- **Email:** [your-email@example.com]
+- **Email:** maku172004@gmail.com
+
 
 ---
 
