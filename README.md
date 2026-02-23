@@ -12,9 +12,10 @@ Don't believe it works? Try it yourself. We built a one-command demo that spins 
 **Prerequisites:** Docker, `kind`, and `kubectl`.
 
 ```bash
-git clone [https://github.com/yourusername/blackbox.git](https://github.com/yourusername/blackbox.git)
+git clone https://github.com/Maku38/blackbox.git
 cd blackbox
 ./demo.sh
+```
 
 **BlackBox** is a deterministic, zero-overhead "flight recorder" for Kubernetes clusters. Instead of drowning in terabytes of logs *after* a crash, BlackBox uses eBPF to continuously record the exact syscalls and network flows that *led to* the failure. When a pod dies, BlackBox instantly generates a causal graph and feeds it to an LLM for automated root-cause analysis.
 
@@ -43,7 +44,7 @@ BlackBox is **deterministic and proactive**:
 
 *BlackBox detects a fork bomb before the node becomes unresponsive—and identifies the culprit instantly.*
 
-![Project Screenshot](assets/Screenshot from 2026-02-24 00-03-30.png)
+![Project Screenshot](assets/Screenshot%20from%202026-02-24%2000-03-30.png)
 
 ---
 
