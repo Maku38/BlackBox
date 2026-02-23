@@ -11,27 +11,32 @@ API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-fl
 def contextualize(raw_data):
     if not raw_data: return []
     
-    raw_data.sort(key=lambda x: x['time'])
-    crash_time = raw_data[-1]['time']
+    # FIXED: Updated 'time' to 'timestamp' to match C output
+    raw_data.sort(key=lambda x: x['timestamp'])
+    crash_time = raw_data[-1]['timestamp']
     
     compressed_timeline = []
     current_cluster = None
 
     for event in raw_data:
-        diff_ns = event['time'] - crash_time
+        diff_ns = event['timestamp'] - crash_time
         rel_sec = diff_ns / 1_000_000_000.0
+        
+        # FIXED: Updated 'type' check to use the string "network" instead of 3
+        is_net = event.get('type') == 'network'
         
         clean_event = {
             "t": f"{rel_sec:.3f}s",
             "pid": event['pid'],
             "comm": event['comm'],
-            "ctx": event['context'],
-            "type": "NET" if event['type'] == 3 else "EXEC",
+            "ctx": event.get('context', 'UNKNOWN'),
+            "type": "NET" if is_net else "EXEC",
             "count": 1
         }
         
-        if event['type'] == 3:
-            clean_event["dst"] = f"{event['dest_ip']}:{event['dest_port']}"
+        if is_net:
+            # FIXED: Match dst_ip and dport from C output
+            clean_event["dst"] = f"{event.get('dst_ip')}:{event.get('dport')}"
 
         # SQUASH sequential identical events to save LLM tokens without losing the anomaly pattern
         if current_cluster and \
@@ -53,8 +58,8 @@ def contextualize(raw_data):
 
 # --- 2. VIRTUAL SRE ENGINE ---
 def query_llm(timeline):
-    if not API_KEY:
-        print("[!] No API Key found. Run: export LLM_API_KEY='your_key'")
+    if not API_KEY or API_KEY == "paste your key here":
+        print("[!] No API Key found. Please add your Gemini API Key at the top of analyze_real.py")
         return None
 
     system_prompt = """
