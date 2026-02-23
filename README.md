@@ -5,6 +5,17 @@
 [![Kubernetes](https://img.shields.io/badge/kubernetes-DaemonSet-326ce5.svg)](https://kubernetes.io/)
 [![Linux](https://img.shields.io/badge/Linux-Kernel_5.8%2B-orange.svg)](https://www.kernel.org/)
 
+## 🚀 60-Second Quickstart
+
+Don't believe it works? Try it yourself. We built a one-command demo that spins up a local Kubernetes cluster, deploys the BlackBox eBPF agent, detonates a fork bomb, and automatically triggers the Virtual SRE to diagnose it.
+
+**Prerequisites:** Docker, `kind`, and `kubectl`.
+
+```bash
+git clone [https://github.com/yourusername/blackbox.git](https://github.com/yourusername/blackbox.git)
+cd blackbox
+./demo.sh
+
 **BlackBox** is a deterministic, zero-overhead "flight recorder" for Kubernetes clusters. Instead of drowning in terabytes of logs *after* a crash, BlackBox uses eBPF to continuously record the exact syscalls and network flows that *led to* the failure. When a pod dies, BlackBox instantly generates a causal graph and feeds it to an LLM for automated root-cause analysis.
 
 ## 🎯 The Problem
