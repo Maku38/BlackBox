@@ -43,6 +43,8 @@ BlackBox is **deterministic and proactive**:
 
 *BlackBox detects a fork bomb before the node becomes unresponsive—and identifies the culprit instantly.*
 
+![Project Screenshot](assets/Screenshot from 2026-02-24 00-03-30.png)
+
 ---
 
 ## 📊 How It Works
