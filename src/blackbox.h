@@ -7,7 +7,8 @@
 enum event_type {
     EVENT_EXEC = 1,
     EVENT_EXIT = 2,
-    EVENT_TCP_CONNECT = 3
+    EVENT_TCP_CONNECT = 3,
+    EVENT_OOM = 4  // <-- NEW: OOM Kill Event
 };
 
 struct event_t {

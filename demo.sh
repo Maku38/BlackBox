@@ -12,6 +12,7 @@ echo -e "${GREEN}🚀 Initiating BlackBox Zero-to-Hero Demo...${NC}\n"
 command -v kind >/dev/null 2>&1 || { echo -e "${RED}❌ 'kind' is not installed. Aborting.${NC}" >&2; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { echo -e "${RED}❌ 'kubectl' is not installed. Aborting.${NC}" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo -e "${RED}❌ 'docker' is not installed. Aborting.${NC}" >&2; exit 1; }
+command -v helm >/dev/null 2>&1 || { echo -e "${RED}❌ 'helm' is not installed. Aborting.${NC}" >&2; exit 1; }
 
 # 2. Spin up Kind Cluster
 echo -e "${GREEN}[1/6] Spinning up local Kubernetes cluster (kind)...${NC}"
@@ -22,48 +23,11 @@ echo -e "\n${GREEN}[2/6] Building eBPF Agent Docker Image...${NC}"
 docker build -t blackbox:demo -f k8s/Dockerfile .
 kind load docker-image blackbox:demo --name blackbox-demo
 
-# 4. Deploy BlackBox DaemonSet
-echo -e "\n${GREEN}[3/6] Deploying BlackBox Kernel Agent...${NC}"
-# We inject a known token dynamically for the demo
-cat <<EOF | kubectl apply -f -
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: blackbox-agent
-  namespace: kube-system
-spec:
-  selector:
-    matchLabels:
-      app: blackbox
-  template:
-    metadata:
-      labels:
-        app: blackbox
-    spec:
-      hostPID: true
-      hostNetwork: true
-      containers:
-      - name: agent
-        image: blackbox:demo
-        imagePullPolicy: IfNotPresent
-        securityContext:
-          privileged: true
-        env:
-        - name: BLACKBOX_AUTH_TOKEN
-          value: "demo_root_7749"
-        volumeMounts:
-        - name: sys
-          mountPath: /sys
-        - name: proc
-          mountPath: /proc
-      volumes:
-      - name: sys
-        hostPath:
-          path: /sys
-      - name: proc
-        hostPath:
-          path: /proc
-EOF
+# 4. Deploy BlackBox DaemonSet via Helm
+echo -e "\n${GREEN}[3/6] Deploying BlackBox Kernel Agent via Helm...${NC}"
+
+# We dynamically inject a known token for the demo via Helm values
+helm install blackbox ./charts/blackbox -n kube-system --set security.authToken="demo_root_7749"
 
 echo "Waiting for BlackBox eBPF probes to attach to the kernel..."
 kubectl rollout status ds/blackbox-agent -n kube-system --timeout=90s

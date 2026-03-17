@@ -47,30 +47,26 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx)
     return 0;
 }
 
-// Hook 2: TCP Connect (The "Where")
-// kprobe on tcp_v4_connect to capture the destination IP *before* the connection is established.
-SEC("kprobe/tcp_v4_connect")
-int BPF_KPROBE(handle_tcp_connect, struct sock *sk, struct sockaddr *uaddr)
+// Hook 3: OOM Kill Detector (The Autonomous Trigger)
+// This fires the exact millisecond the Linux kernel decides to kill a process for memory exhaustion.
+SEC("kprobe/oom_kill_process")
+int BPF_KPROBE(handle_oom_kill)
 {
     struct event_t *e;
     
+    // Reserve space in Ring Buffer
     e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
     if (!e) return 0;
 
     fill_base_event(e);
-    e->type = EVENT_TCP_CONNECT;
+    e->type = EVENT_OOM; // Tag it as an OOM event
 
-    // Cast the untyped 'uaddr' pointer to sockaddr_in (IPv4)
-    struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
-
-    // Read Destination IP/Port from arguments (User Intent)
-    e->daddr = BPF_CORE_READ(usin, sin_addr.s_addr);
-    e->dport = bpf_ntohs(BPF_CORE_READ(usin, sin_port));
-
-    // Source IP is not known yet, so we zero it out
+    // Clear network fields
     e->saddr = 0;
+    e->daddr = 0;
     e->sport = 0;
-    
+    e->dport = 0;
+
     bpf_ringbuf_submit(e, 0);
     return 0;
 }

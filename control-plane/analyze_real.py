@@ -3,7 +3,7 @@ import sys
 import os
 import requests
 
-API_KEY = "paste your key here"
+API_KEY = "AIzaSyAXLlV1hA2-gINzEQ15BCIT01qz2pD1nTU"
 # Using Flash model for speed and high rate limits during testing
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 

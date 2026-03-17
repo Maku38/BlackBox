@@ -9,6 +9,16 @@
 
 Don't believe it works? Try it yourself. We built a one-command demo that spins up a local Kubernetes cluster, deploys the BlackBox eBPF agent, detonates a fork bomb, and automatically triggers the Virtual SRE to diagnose it.
 
+## 🛡️ Enterprise Installation (Helm)
+
+BlackBox is built for strict production environments. The agent runs as a DaemonSet, and the authentication token is securely managed via native Kubernetes Secrets, completely decoupled from the application logic.
+
+```bash
+# Install securely via Helm
+helm install blackbox ./charts/blackbox \
+  --namespace kube-system \
+  --set security.authToken="your_highly_secure_token"
+
 **Prerequisites:** Docker, `kind`, and `kubectl`.
 
 ```bash

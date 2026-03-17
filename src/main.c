@@ -168,7 +168,7 @@ int handle_event(void *ctx, void *data, size_t data_sz) {
     char ctx_str[64];
     resolve_context(e->pid, e->cgroup_id, ctx_str, sizeof(ctx_str));
 
-    // No mutex needed! This runs synchronously in the poll loop.
+    // Write to the rolling buffer
     memcpy(&event_log[log_head].raw, e, sizeof(struct event_t));
     strncpy(event_log[log_head].context, ctx_str, 64);
     
@@ -176,6 +176,12 @@ int handle_event(void *ctx, void *data, size_t data_sz) {
     if (log_head >= HISTORY_SIZE) {
         log_head = 0;
         full_loop = true;
+    }
+
+    // --- AUTONOMOUS OOM TRIGGER ---
+    if (e->type == 4) { // EVENT_OOM
+        printf("\n[⚠️ FATAL] Kernel OOM Killer triggered! Auto-dumping flight recorder...\n");
+        trigger_dump = true; // Instantly dump the JSON without human intervention!
     }
     
     return 0;
