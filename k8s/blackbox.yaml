@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: blackbox-agent
-  namespace: default
+  namespace: kube-system
   labels:
     app: blackbox
 spec:

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: blackbox-agent
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: blackbox
+  template:
+    metadata:
+      labels:
+        app: blackbox
+    spec:
+      hostPID: true
+      hostNetwork: true
+      containers:
+      - name: agent
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          privileged: true
+        envFrom:
+        - secretRef:
+            name: blackbox-auth-secret
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+        - name: proc
+          mountPath: /proc
+      volumes:
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: proc
+        hostPath:
+          path: /proc

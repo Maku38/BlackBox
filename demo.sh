@@ -20,6 +20,7 @@ kind create cluster --name blackbox-demo || echo "Cluster already exists."
 
 # 3. Build & Load Image
 echo -e "\n${GREEN}[2/6] Building eBPF Agent Docker Image...${NC}"
+make
 docker build -t blackbox:demo -f k8s/Dockerfile .
 kind load docker-image blackbox:demo --name blackbox-demo
 
@@ -63,14 +64,14 @@ kill $PF_PID
 # 7. Extract & Analyze
 echo -e "\n${GREEN}[6/6] Extracting Kernel Telemetry...${NC}"
 POD_NAME=$(kubectl get pods -n kube-system -l app=blackbox -o jsonpath='{.items[0].metadata.name}')
-JSON_FILE=$(kubectl exec -n kube-system $POD_NAME -- ls | grep incident_ | head -n 1)
+JSON_FILE=$(kubectl exec -n kube-system $POD_NAME -- ls /app | grep incident_ | head -n 1)
 
 if [ -z "$JSON_FILE" ]; then
     echo -e "${RED}❌ Failed to find JSON dump. Did the agent crash?${NC}"
     exit 1
 fi
 
-kubectl cp kube-system/$POD_NAME:$JSON_FILE ./$JSON_FILE
+kubectl cp kube-system/$POD_NAME:/app/$JSON_FILE ./$JSON_FILE
 
 echo -e "\n${GREEN}🚀 Passing Telemetry to Virtual SRE (Local AI)...${NC}"
 # Feed the extracted JSON file to your Python analyzer

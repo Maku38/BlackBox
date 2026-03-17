@@ -1,5 +1,5 @@
 # Compiled binaries and objects
-blackbox
+/blackbox
 *.o
 *.skel.h
 

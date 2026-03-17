@@ -2,15 +2,14 @@ import sys
 import concurrent.futures
 import requests
 import time
+import os
 
 # --- FLEET COMMANDER ---
 # This simulates your central Control Plane triggering dumps across N nodes.
 
-# MUST MATCH THE TOKEN IN main.c
-AUTH_TOKEN = "secret_k8s_7749" 
+AUTH_TOKEN = os.getenv("BLACKBOX_AUTH_TOKEN", "")
 
 def trigger_node(ip):
-    # Fixed: Added the /dump endpoint and the authentication token
     url = f"http://{ip}:8080/dump?token={AUTH_TOKEN}"
     try:
         # 2-second timeout. If a node is dead, we move on quickly.
@@ -49,6 +48,9 @@ if __name__ == "__main__":
         print("Usage: python3 commander.py <ip1> <ip2> ...")
         print("Example: python3 commander.py 127.0.0.1 10.0.0.5 10.0.0.6")
     else:
-        # Strip the script name and pass the IPs
+        if not AUTH_TOKEN:
+            print("❌ Error: BLACKBOX_AUTH_TOKEN environment variable is not set.")
+            print("   Export it before running: export BLACKBOX_AUTH_TOKEN=your_token")
+            sys.exit(1)
         targets = sys.argv[1:]
         execute_fleet_dump(targets)

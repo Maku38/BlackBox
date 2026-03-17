@@ -1,0 +1,8 @@
+image:
+  repository: blackbox
+  tag: demo
+  pullPolicy: IfNotPresent
+
+security:
+  # Users will change this in production
+  authToken: "enterprise_secure_token_999"

@@ -126,13 +126,13 @@ BlackBox has three layers:
 #### 1️⃣ Build the eBPF Agent
 
 ```bash
-cd src
 make
 ```
 
 This compiles `main.bpf.c` (kernel probe) and `main.c` (userspace agent).
 
-**Output:** `src/blackbox` (binary)
+**Output:** `blackbox` (binary in repo root)
+- **Zero-Overhead Tracing:** eBPF kernel probes capture `sched_process_exec` and OOM kill events directly in the kernel—no userspace context switches
 
 #### 2️⃣ Containerize & Push
 
@@ -155,8 +155,8 @@ docker push <your-registry>/blackbox:latest
 kubectl apply -f k8s/blackbox.yaml
 
 # Verify deployment
-kubectl get pods -n blackbox -o wide
-kubectl logs -n blackbox -l app=blackbox -f
+kubectl get pods -n kube-system -l app=blackbox -o wide
+kubectl logs -n kube-system -l app=blackbox -f
 ```
 
 #### 4️⃣ Trigger an Incident & Analyze
@@ -239,6 +239,8 @@ curl "http://<NODE_IP>:8080/dump?token=your_secure_token_here"
 
 ### ✅ Completed
 - [x] eBPF process (`sched_process_exec`, `sched_process_exit`) and network tracing
+- [x] eBPF process execution tracing (`sched_process_exec`)
+- [x] Autonomous OOM kill detection (`kprobe/oom_kill_process`)
 - [x] K8s DaemonSet deployment (privileged, all nodes)
 - [x] L2 Cgroup Cache for container identification
 - [x] Distributed Python Fleet Commander
@@ -247,7 +249,6 @@ curl "http://<NODE_IP>:8080/dump?token=your_secure_token_here"
 - [x] HTTP API for dump triggers
 
 ### 🚧 In Progress
-- [ ] Automatic dump triggering on K8s OOMKilled events
 - [ ] Native K8s RBAC integration
 - [ ] Webhook support for Slack/PagerDuty alerts
 - [ ] Grafana dashboard for event timeline visualization
@@ -342,26 +343,17 @@ sudo dnf install -y \
 ### Build Steps
 
 ```bash
-cd src
 make clean
-make VERBOSE=1
-./blackbox --help
+make
 ```
 
 **Output:**
 - `blackbox` - Main userspace binary
-- `main.bpf.o` - Compiled eBPF object file
+- `src/main.bpf.o` - Compiled eBPF object file
 
 ---
 
 ## 🧪 Testing
-
-### Unit Tests
-
-```bash
-cd src
-make test
-```
 
 ### Integration Test (Local Cluster)
 
@@ -377,7 +369,7 @@ python3 /path/to/trigger_fork_bomb.py
 sleep 10
 
 # Check logs
-kubectl logs -n blackbox -l app=blackbox | grep "DUMP_COMPLETE"
+kubectl logs -n kube-system -l app=blackbox | grep "DUMP_COMPLETE"
 ```
 
 ---
