@@ -18,6 +18,7 @@ BlackBox is built for strict production environments. The agent runs as a Daemon
 helm install blackbox ./charts/blackbox \
   --namespace kube-system \
   --set security.authToken="your_highly_secure_token"
+```
 
 **Prerequisites:** Docker, `kind`, and `kubectl`.
 

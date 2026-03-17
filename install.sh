@@ -22,7 +22,7 @@ TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR"
 echo "📦 Downloading latest BlackBox release..."
 # Be sure to replace 'yourusername' with your actual GitHub username!
-git clone --depth 1 https://github.com/yourusername/blackbox.git &> /dev/null
+git clone --depth 1 https://github.com/Maku38/blackbox.git &> /dev/null
 
 # 4. Install via Helm
 echo "🛡️ Deploying secure DaemonSet to kube-system..."
