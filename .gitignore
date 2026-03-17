@@ -12,3 +12,4 @@ __pycache__/
 
 # Environment files (Never commit your API keys!)
 .env
+.env.example

@@ -164,8 +164,9 @@ kubectl logs -n blackbox -l app=blackbox -f
 ```bash
 cd control-plane
 
-# Set your LLM API key (Google Gemini recommended)
-export LLM_API_KEY='your_gemini_api_key_here'
+# Set up your AI configuration (Optional)
+cp .env.example .env
+nano .env # Add your preferred LLM provider and API key
 
 # Trigger a dump on a specific node
 python3 commander.py <NODE_INTERNAL_IP>
@@ -173,7 +174,7 @@ python3 commander.py <NODE_INTERNAL_IP>
 # Wait for dump file to be generated, then extract it
 kubectl cp blackbox/<BLACKBOX_POD_NAME>:/app/<INCIDENT_FILE>.json ./incident.json
 
-# Run AI analysis
+# Run the analyzer (Works completely offline if AI is disabled or set to 'local')
 python3 analyze_real.py incident.json
 ```
 
@@ -261,14 +262,17 @@ curl "http://<NODE_IP>:8080/dump?token=your_secure_token_here"
 
 ## 📋 Configuration
 
-### Environment Variables
+### Environment Variables (Virtual SRE)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LLM_API_KEY` | *(required)* | Google Gemini API key for root cause analysis |
-| `RING_BUFFER_SIZE` | `65536` | eBPF ring buffer size (bytes) |
-| `NODE_IP` | auto-detected | Kubernetes node IP for commander API |
-| `BLACKBOX_PORT` | `8080` | HTTP server port on K8s agent |
+Configure the AI engine by copying `control-plane/.env.example` to `control-plane/.env`. The AI analysis is **optional**; if not configured, BlackBox will simply output the compressed, deterministic event timeline.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `LLM_PROVIDER` | `gemini`, `openai`, `claude`, or `local` | `None` (AI disabled) |
+| `LLM_API_KEY` | API key for the chosen cloud provider | |
+| `LLM_MODEL` | Override the default model | `gemini-2.5-flash` / `gpt-4-turbo` / `llama3` |
+| `LLM_BASE_URL` | Endpoint for local models (Ollama, LM Studio) | `http://localhost:11434` |
+| `BLACKBOX_AUTH_TOKEN` | Token to trigger remote dumps (Agent env var) | Auto-generated |
 
 ### K8s DaemonSet Customization
 
